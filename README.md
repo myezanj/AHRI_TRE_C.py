@@ -4,6 +4,12 @@ Python package for calling the AHRI TRE C core shared library.
 
 This package is designed to call the C core from the AHRI_TRE.C project.
 
+## C ABI symbol policy
+
+The Python binding now targets Julia-style unprefixed C symbols as the primary API surface (for example: `version`, `last_error`, `map_value_type`).
+
+Prefixed symbols (for example: `ahri_tre_version`, `ahri_tre_last_error`) are still exported by the C core as compatibility aliases and remain safe for existing integrations.
+
 ## Install (editable)
 
 ```bash
