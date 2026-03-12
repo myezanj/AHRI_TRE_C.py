@@ -227,3 +227,73 @@ class AHRI_TRE_C:
             return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
         finally:
             self.lib.free_ptr(out_ptr)
+
+    def parse_in_list_values(self, values_str: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_in_list_values_json(values_str.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def parse_check_constraint_values(self, constraint_def: str, column_name: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_check_constraint_values_json(
+            constraint_def.encode("utf-8"),
+            column_name.encode("utf-8"),
+            byref(out_ptr),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def parse_redcap_choices(self, choices: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_redcap_choices_json(choices.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def map_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
+        out_type = c_int(0)
+        out_fmt = c_void_p()
+        validation_arg = None if validation is None else validation.encode("utf-8")
+        code = self.lib.map_value_type(
+            field_type.encode("utf-8"),
+            validation_arg,
+            byref(out_type),
+            byref(out_fmt),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            fmt = None
+            if out_fmt.value:
+                fmt = ctypes.cast(out_fmt, c_char_p).value.decode("utf-8")
+            return out_type.value, fmt
+        finally:
+            if out_fmt.value:
+                self.lib.free_ptr(out_fmt)
+
+    def get_redcap_choices_for_field(self, field_type: str, choices: str | None = None) -> str:
+        return self.get_redcap_choices_for_field_json(field_type, choices)
+
+    def parse_in_list_values_json(self, values_str: str) -> str:
+        return self.parse_in_list_values(values_str)
+
+    def parse_check_constraint_values_json(self, constraint_def: str, column_name: str) -> str:
+        return self.parse_check_constraint_values(constraint_def, column_name)
+
+    def parse_redcap_choices_json(self, choices: str) -> str:
+        return self.parse_redcap_choices(choices)
+
+    def map_redcap_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
+        return self.map_value_type(field_type, validation)
