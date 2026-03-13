@@ -9,7 +9,10 @@ description = "Python bindings for AHRI TRE C core"
 readme = "README.md"
 requires-python = ">=3.9"
 authors = [
-  { name = "AHRI" }
+  { name = "Njabulo Myeza", email = "njabulo.myeza@ahri.org" }
+]
+maintainers = [
+  { name = "Njabulo Myeza", email = "njabulo.myeza@ahri.org" }
 ]
 classifiers = [
   "Programming Language :: Python :: 3",
