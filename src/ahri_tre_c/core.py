@@ -71,6 +71,7 @@ class AHRI_TRE_C:
         self._missing_symbols: set[str] = set()
         self._configure_signatures()
 
+<<<<<<< HEAD
     def _bind_symbol(self, name: str) -> object:
         fn = self._bound_functions.get(name)
         if fn is not None:
@@ -163,12 +164,80 @@ class AHRI_TRE_C:
         out_ptr = c_void_p()
         fn = self._require_symbol(fn_name)
         code = fn(*args, byref(out_ptr))
+=======
+        self.lib.version.restype = c_char_p
+        self.lib.last_error.restype = c_char_p
+
+        self.lib.sha256_file_hex.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.sha256_file_hex.restype = c_int
+
+        self.lib.verify_sha256_file.argtypes = [c_char_p, c_char_p, POINTER(c_int)]
+        self.lib.verify_sha256_file.restype = c_int
+
+        self.lib.path_to_file_uri.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.path_to_file_uri.restype = c_int
+
+        self.lib.file_uri_to_path.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.file_uri_to_path.restype = c_int
+
+        self.lib.is_ncname.argtypes = [c_char_p, c_int, POINTER(c_int)]
+        self.lib.is_ncname.restype = c_int
+
+        self.lib.to_ncname.argtypes = [c_char_p, c_char_p, c_char_p, c_int, c_int, POINTER(c_void_p)]
+        self.lib.to_ncname.restype = c_int
+
+        self.lib.parse_flavour.argtypes = [c_char_p, POINTER(c_int)]
+        self.lib.parse_flavour.restype = c_int
+
+        self.lib.map_sql_type_to_tre.argtypes = [c_char_p, POINTER(c_int)]
+        self.lib.map_sql_type_to_tre.restype = c_int
+
+        self.lib.extract_table_from_sql.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.extract_table_from_sql.restype = c_int
+
+        self.lib.parse_in_list_values_json.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.parse_in_list_values_json.restype = c_int
+
+        self.lib.parse_check_constraint_values_json.argtypes = [c_char_p, c_char_p, POINTER(c_void_p)]
+        self.lib.parse_check_constraint_values_json.restype = c_int
+
+        self.lib.map_value_type.argtypes = [c_char_p, c_char_p, POINTER(c_int), POINTER(c_void_p)]
+        self.lib.map_value_type.restype = c_int
+
+        self.lib.parse_redcap_choices_json.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.parse_redcap_choices_json.restype = c_int
+
+        self.lib.strip_html.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.strip_html.restype = c_int
+
+        self.lib.infer_label_from_field_name.argtypes = [c_char_p, POINTER(c_void_p)]
+        self.lib.infer_label_from_field_name.restype = c_int
+
+        self.lib.get_redcap_choices_for_field_json.argtypes = [c_char_p, c_char_p, POINTER(c_void_p)]
+        self.lib.get_redcap_choices_for_field_json.restype = c_int
+
+        self.lib.free_ptr.argtypes = [c_void_p]
+        self.lib.free_ptr.restype = None
+
+    def version(self) -> str:
+        return self.lib.version().decode("utf-8")
+
+    def _raise_last_error(self, code: int):
+        raw = self.lib.last_error()
+        msg = raw.decode("utf-8") if raw else "Unknown AHRI_TRE C error"
+        raise RuntimeError(f"AHRI_TRE C error {code}: {msg}")
+
+    def sha256_file_hex(self, file_path: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.sha256_file_hex(file_path.encode("utf-8"), byref(out_ptr))
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
         if code != 0:
             self._raise_last_error(code)
         try:
             raw = ctypes.cast(out_ptr, c_char_p).value
             return raw.decode("utf-8") if raw else ""
         finally:
+<<<<<<< HEAD
             self._require_symbol("free")(out_ptr)
 
     def version(self) -> str:
@@ -188,6 +257,14 @@ class AHRI_TRE_C:
     def verify_sha256_file(self, file_path: str, expected_hex: str) -> bool:
         out_match = c_int(0)
         code = self._require_symbol("verify_sha256_file")(
+=======
+            self.lib.free_ptr(out_ptr)
+        return digest
+
+    def verify_sha256_file(self, file_path: str, expected_hex: str) -> bool:
+        out_match = c_int(0)
+        code = self.lib.verify_sha256_file(
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
             file_path.encode("utf-8"), expected_hex.encode("utf-8"), byref(out_match)
         )
         if code != 0:
@@ -195,6 +272,7 @@ class AHRI_TRE_C:
         return bool(out_match.value)
 
     def path_to_file_uri(self, path: str) -> str:
+<<<<<<< HEAD
         return self._call_allocating_utf8("path_to_file_uri", path.encode("utf-8"))
 
     def file_uri_to_path(self, uri: str) -> str:
@@ -203,10 +281,35 @@ class AHRI_TRE_C:
     def is_ncname(self, value: str, strict: bool = False) -> bool:
         out_valid = c_int(0)
         code = self._require_symbol("is_ncname")(value.encode("utf-8"), int(strict), byref(out_valid))
+=======
+        out_ptr = c_void_p()
+        code = self.lib.path_to_file_uri(path.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def file_uri_to_path(self, uri: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.file_uri_to_path(uri.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def is_ncname(self, value: str, strict: bool = False) -> bool:
+        out_valid = c_int(0)
+        code = self.lib.is_ncname(value.encode("utf-8"), int(strict), byref(out_valid))
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
         if code != 0:
             self._raise_last_error(code)
         return bool(out_valid.value)
 
+<<<<<<< HEAD
     def to_ncname(
         self,
         value: str,
@@ -217,23 +320,140 @@ class AHRI_TRE_C:
     ) -> str:
         return self._call_allocating_utf8(
             "to_ncname",
+=======
+    def to_ncname(self, value: str, replacement: str = "_", prefix: str = "_", avoid_reserved: bool = True, strict: bool = False) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.to_ncname(
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
             value.encode("utf-8"),
             replacement.encode("utf-8"),
             prefix.encode("utf-8"),
             int(avoid_reserved),
             int(strict),
         )
+<<<<<<< HEAD
 
     def strip_html(self, text: str) -> str:
         return self._call_allocating_utf8("strip_html", text.encode("utf-8"))
 
     def infer_label_from_field_name(self, field_name: str) -> str:
         return self._call_allocating_utf8("infer_label_from_field_name", field_name.encode("utf-8"))
+=======
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def strip_html(self, text: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.strip_html(text.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def infer_label_from_field_name(self, field_name: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.infer_label_from_field_name(field_name.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
 
     def get_redcap_choices_for_field_json(self, field_type: str, choices: str | None = None) -> str:
         choices_arg = None if choices is None else choices.encode("utf-8")
+<<<<<<< HEAD
         return self._call_allocating_utf8(
             "get_redcap_choices_for_field_json",
+=======
+        code = self.lib.get_redcap_choices_for_field_json(
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
             field_type.encode("utf-8"),
             choices_arg,
         )
+<<<<<<< HEAD
+=======
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def parse_in_list_values(self, values_str: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_in_list_values_json(values_str.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def parse_check_constraint_values(self, constraint_def: str, column_name: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_check_constraint_values_json(
+            constraint_def.encode("utf-8"),
+            column_name.encode("utf-8"),
+            byref(out_ptr),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def parse_redcap_choices(self, choices: str) -> str:
+        out_ptr = c_void_p()
+        code = self.lib.parse_redcap_choices_json(choices.encode("utf-8"), byref(out_ptr))
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            return ctypes.cast(out_ptr, c_char_p).value.decode("utf-8")
+        finally:
+            self.lib.free_ptr(out_ptr)
+
+    def map_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
+        out_type = c_int(0)
+        out_fmt = c_void_p()
+        validation_arg = None if validation is None else validation.encode("utf-8")
+        code = self.lib.map_value_type(
+            field_type.encode("utf-8"),
+            validation_arg,
+            byref(out_type),
+            byref(out_fmt),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            fmt = None
+            if out_fmt.value:
+                fmt = ctypes.cast(out_fmt, c_char_p).value.decode("utf-8")
+            return out_type.value, fmt
+        finally:
+            if out_fmt.value:
+                self.lib.free_ptr(out_fmt)
+
+    def get_redcap_choices_for_field(self, field_type: str, choices: str | None = None) -> str:
+        return self.get_redcap_choices_for_field_json(field_type, choices)
+
+    def parse_in_list_values_json(self, values_str: str) -> str:
+        return self.parse_in_list_values(values_str)
+
+    def parse_check_constraint_values_json(self, constraint_def: str, column_name: str) -> str:
+        return self.parse_check_constraint_values(constraint_def, column_name)
+
+    def parse_redcap_choices_json(self, choices: str) -> str:
+        return self.parse_redcap_choices(choices)
+
+    def map_redcap_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
+        return self.map_value_type(field_type, validation)
+>>>>>>> 588143ccddb1eea3457148347ca35ffc106cd5b4
