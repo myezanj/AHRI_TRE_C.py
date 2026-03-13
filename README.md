@@ -7,7 +7,7 @@ This package is designed to call the C core from the AHRI_TRE.C project.
 ## Install (editable)
 
 ```bash
-pip install -e wrappers/python
+pip install -e .
 ```
 
 ## Build C core first
@@ -29,6 +29,12 @@ On Windows PowerShell:
 $env:AHRI_TRE_C_ROOT = "C:\\path\\to\\AHRI_TRE.C"
 ```
 
+If you already know the compiled shared library path, you can set:
+
+```powershell
+$env:AHRI_TRE_C_LIB = "C:\\path\\to\\ahri_tre_c.dll"
+```
+
 ## Usage
 
 ```python
@@ -39,3 +45,9 @@ print(client.version())
 ```
 
 You can also set `AHRI_TRE_C_LIB` to override the shared library path directly.
+
+## Development quick check
+
+```bash
+python -m compileall src
+```
