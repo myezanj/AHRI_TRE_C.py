@@ -2,7 +2,11 @@
 
 Python package for calling the AHRI TRE C core shared library.
 
-This package is designed to call the C core from the AHRI_TRE.C project.
+This package is designed to call the C core from the AHRI_TRE.c project.
+
+Repository used by default:
+
+- [AHRI_TRE.c](https://github.com/myezanj/AHRI_TRE.c.git)
 
 ## C ABI symbol policy
 
@@ -18,21 +22,27 @@ pip install -e .
 
 ## Build C core first
 
+Keep your local C core checkout up to date before building:
+
+```bash
+git -C ../AHRI_TRE.c pull --ff-only
+```
+
 ```bash
 cmake -S c_core -B c_core/build
 cmake --build c_core/build --config Release
 ```
 
-If AHRI_TRE.C is a sibling repository, set:
+If AHRI_TRE.c is a sibling repository, set:
 
 ```bash
-export AHRI_TRE_C_ROOT=/path/to/AHRI_TRE.C
+export AHRI_TRE_C_ROOT=/path/to/AHRI_TRE.c
 ```
 
 On Windows PowerShell:
 
 ```powershell
-$env:AHRI_TRE_C_ROOT = "C:\\path\\to\\AHRI_TRE.C"
+$env:AHRI_TRE_C_ROOT = "C:\\path\\to\\AHRI_TRE.c"
 ```
 
 If you already know the compiled shared library path, you can set:
