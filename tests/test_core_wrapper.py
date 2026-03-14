@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import ahri_tre_c
 from ahri_tre_c.core import AHRI_TRE_C, _library_candidates_for_root, default_library_path
 
 
@@ -28,7 +29,7 @@ class CoreWrapperTests(unittest.TestCase):
             "extract_table_from_sql",
             "parse_in_list_values_json",
             "parse_check_constraint_values_json",
-            "map_redcap_value_type",
+            "map_value_type",
             "parse_redcap_choices_json",
         ]:
             bind(name, Mock(return_value=0))
@@ -36,6 +37,7 @@ class CoreWrapperTests(unittest.TestCase):
         bind("parse_flavour", Mock(return_value=0))
         bind("map_sql_type_to_tre", Mock(return_value=0))
         bind("free", Mock(return_value=None))
+        bind("free_ptr", Mock(return_value=None))
 
         def verify_sha256_stub(_path, _expected, out_match_ptr):
             out_match_ptr._obj.value = 1
@@ -74,7 +76,7 @@ class CoreWrapperTests(unittest.TestCase):
             "extract_table_from_sql",
             "parse_in_list_values_json",
             "parse_check_constraint_values_json",
-            "map_redcap_value_type",
+            "map_value_type",
             "parse_redcap_choices_json",
             "strip_html",
             "infer_label_from_field_name",
@@ -113,12 +115,43 @@ class CoreWrapperTests(unittest.TestCase):
             self.assertEqual(default_library_path(), "C:/x.dll")
 
     def test_library_candidates_include_expected_filenames(self):
-        root = Path("C:/repo/AHRI_TRE.C")
+        root = Path("C:/repo/AHRI_TRE.c")
         windows = [str(p).replace("\\", "/") for p in _library_candidates_for_root(root, "windows")]
         linux = [str(p).replace("\\", "/") for p in _library_candidates_for_root(root, "linux")]
 
-        self.assertTrue(any(p.endswith("/c_core/build/Release/ahri_tre_c.dll") for p in windows))
-        self.assertTrue(any(p.endswith("/c_core/build/libahri_tre_c.so") for p in linux))
+        self.assertTrue(any(p.endswith("/c_core/build/Release/tre_c.dll") for p in windows))
+        self.assertTrue(any(p.endswith("/c_core/build/libtre_c.so") for p in linux))
+
+    @patch("ahri_tre_c.core.ctypes.CDLL")
+    def test_map_value_type_uses_current_upstream_symbol(self, cdll_mock: Mock):
+        lib = self._make_mock_lib()
+
+        def map_value_type_stub(_field_type, _validation, out_type_ptr, out_fmt_ptr):
+            out_type_ptr._obj.value = 7
+            out_fmt_ptr._obj.value = None
+            return 0
+
+        lib.map_value_type = Mock(side_effect=map_value_type_stub)
+        lib.ahri_tre_map_value_type = lib.map_value_type
+
+        cdll_mock.return_value = lib
+        client = AHRI_TRE_C("dummy.dll")
+        self.assertEqual(client.map_value_type("radio"), (7, None))
+
+    def test_package_exports_strict_surface(self):
+        self.assertIn("version", ahri_tre_c.__all__)
+        self.assertIn("quote_identifier", ahri_tre_c.__all__)
+        self.assertIn("prepare_datafile", ahri_tre_c.__all__)
+        self.assertNotIn("add_study", ahri_tre_c.__all__)
+        self.assertNotIn("connect_mssql", ahri_tre_c.__all__)
+
+    def test_module_level_proxy_uses_default_client(self):
+        fake_client = Mock()
+        fake_client.quote_ident.return_value = '"name"'
+
+        with patch("ahri_tre_c.core._get_default_client", return_value=fake_client):
+            self.assertEqual(ahri_tre_c.quote_ident("name"), '"name"')
+            fake_client.quote_ident.assert_called_once_with("name")
 
 
 if __name__ == "__main__":
