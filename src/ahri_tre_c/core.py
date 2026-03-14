@@ -2,12 +2,11 @@ import ctypes
 import os
 import platform
 import re
+from ctypes import POINTER, byref, c_char_p, c_int, c_size_t, c_ubyte, c_void_p
 from dataclasses import dataclass
 from enum import IntEnum
 from pathlib import Path
-from typing import Any, Callable
-
-from ctypes import POINTER, byref, c_char_p, c_int, c_void_p
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,10 +19,11 @@ class ColumnInfo:
 
 class DatabaseFlavour(IntEnum):
     UNKNOWN = 0
-    SQLITE = 1
+    MSSQL = 1
     DUCKDB = 2
-    POSTGRES = 3
-    MSSQL = 4
+    POSTGRESQL = 3
+    SQLITE = 4
+    MYSQL = 5
 
 
 def _normalize_remote(remote: str) -> str:
@@ -51,7 +51,6 @@ def _candidate_core_roots() -> list[Path]:
     anchors = [module_path]
     anchors.extend(module_path.parents)
 
-    # Prefer the current C core repository name first, then legacy fallbacks.
     sibling_names = ["AHRI_TRE.c", "AHRI_TRE.C", "AHRI_TRE.jl"]
     for anchor in anchors:
         for sibling_name in sibling_names:
@@ -68,15 +67,21 @@ def _library_candidates_for_root(core_root: Path, system: str) -> list[Path]:
     base = core_root / "c_core" / "build"
     if system == "windows":
         return [
+            base / "Release" / "tre_c.dll",
+            base / "tre_c.dll",
             base / "Release" / "ahri_tre_c.dll",
             base / "ahri_tre_c.dll",
         ]
     if system == "darwin":
         return [
+            base / "libtre_c.dylib",
+            base / "Release" / "libtre_c.dylib",
             base / "libahri_tre_c.dylib",
             base / "Release" / "libahri_tre_c.dylib",
         ]
     return [
+        base / "libtre_c.so",
+        base / "Release" / "libtre_c.so",
         base / "libahri_tre_c.so",
         base / "Release" / "libahri_tre_c.so",
     ]
@@ -88,7 +93,6 @@ def default_library_path() -> str:
         return env
 
     system = platform.system().lower()
-
     for root in _candidate_core_roots():
         for candidate in _library_candidates_for_root(root, system):
             if candidate.exists():
@@ -133,34 +137,61 @@ class AHRI_TRE_C:
             ("verify_sha256_file", [c_char_p, c_char_p, POINTER(c_int)], c_int),
             ("path_to_file_uri", [c_char_p, POINTER(c_void_p)], c_int),
             ("file_uri_to_path", [c_char_p, POINTER(c_void_p)], c_int),
+            ("emptydir", [c_char_p, c_int, c_int, c_int], c_int),
             ("is_ncname", [c_char_p, c_int, POINTER(c_int)], c_int),
-            (
-                "to_ncname",
-                [c_char_p, c_char_p, c_char_p, c_int, c_int, POINTER(c_void_p)],
-                c_int,
-            ),
+            ("is_start_char", [c_char_p, POINTER(c_int)], c_int),
+            ("is_name_char", [c_char_p, c_int, POINTER(c_int)], c_int),
+            ("to_ncname", [c_char_p, c_char_p, c_char_p, c_int, c_int, POINTER(c_void_p)], c_int),
             ("parse_flavour", [c_char_p, POINTER(c_int)], c_int),
             ("map_sql_type_to_tre", [c_char_p, POINTER(c_int)], c_int),
+            ("map_sql_type_to_tre_for_flavour", [c_char_p, c_int, POINTER(c_int)], c_int),
+            ("get_datasetname", [c_char_p, c_char_p, c_int, c_int, c_int, c_int, POINTER(c_void_p)], c_int),
+            ("get_datafilename", [c_char_p, c_int, c_int, c_int, POINTER(c_void_p)], c_int),
+            (
+                "get_datalake_file_path",
+                [c_char_p, c_char_p, c_char_p, c_char_p, c_int, c_int, c_int, POINTER(c_void_p)],
+                c_int,
+            ),
+            ("prepare_datafile_digest", [c_char_p, c_char_p, POINTER(c_void_p)], c_int),
+            ("prepare_datafile_json", [c_char_p, c_char_p, c_int, c_int, c_char_p, POINTER(c_void_p)], c_int),
+            ("dataset_to_arrow_output_path", [c_char_p, c_char_p, c_int, POINTER(c_int), POINTER(c_void_p)], c_int),
+            ("dataset_to_csv_output_path", [c_char_p, c_char_p, c_int, c_int, POINTER(c_int), POINTER(c_void_p)], c_int),
+            (
+                "dataset_to_arrow_write_bytes",
+                [c_char_p, c_char_p, POINTER(c_ubyte), c_size_t, c_int, POINTER(c_void_p)],
+                c_int,
+            ),
+            ("dataset_to_csv_write_text", [c_char_p, c_char_p, c_char_p, c_int, POINTER(c_void_p)], c_int),
+            (
+                "dataset_to_csv_write_bytes",
+                [c_char_p, c_char_p, c_int, POINTER(c_ubyte), c_size_t, c_int, POINTER(c_void_p)],
+                c_int,
+            ),
+            ("normalise_orcid_rolename", [c_char_p, POINTER(c_void_p)], c_int),
+            ("makeparams_json", [c_int, POINTER(c_void_p)], c_int),
+            ("quote_ident", [c_char_p, POINTER(c_void_p)], c_int),
+            ("quote_identifier", [c_char_p, c_int, POINTER(c_void_p)], c_int),
+            ("quote_sql_str", [c_char_p, POINTER(c_void_p)], c_int),
+            ("quote_qualified_identifier", [c_char_p, POINTER(c_void_p)], c_int),
+            ("julia_type_to_sql_string", [c_char_p, POINTER(c_void_p)], c_int),
+            ("tre_type_to_duckdb_sql", [c_int, POINTER(c_void_p)], c_int),
             ("extract_table_from_sql", [c_char_p, POINTER(c_void_p)], c_int),
+            ("parse_in_list_values", [c_char_p, POINTER(c_void_p)], c_int),
             ("parse_in_list_values_json", [c_char_p, POINTER(c_void_p)], c_int),
-            (
-                "parse_check_constraint_values_json",
-                [c_char_p, c_char_p, POINTER(c_void_p)],
-                c_int,
-            ),
-            (
-                "map_redcap_value_type",
-                [c_char_p, c_char_p, POINTER(c_int), POINTER(c_void_p)],
-                c_int,
-            ),
+            ("parse_check_constraint_values", [c_char_p, c_char_p, POINTER(c_void_p)], c_int),
+            ("parse_check_constraint_values_json", [c_char_p, c_char_p, POINTER(c_void_p)], c_int),
+            ("map_value_type", [c_char_p, c_char_p, POINTER(c_int), POINTER(c_void_p)], c_int),
+            ("parse_redcap_choices", [c_char_p, POINTER(c_void_p)], c_int),
             ("parse_redcap_choices_json", [c_char_p, POINTER(c_void_p)], c_int),
             ("strip_html", [c_char_p, POINTER(c_void_p)], c_int),
             ("infer_label_from_field_name", [c_char_p, POINTER(c_void_p)], c_int),
-            (
-                "get_redcap_choices_for_field_json",
-                [c_char_p, c_char_p, POINTER(c_void_p)],
-                c_int,
-            ),
+            ("get_redcap_choices_for_field", [c_char_p, c_char_p, POINTER(c_void_p)], c_int),
+            ("get_redcap_choices_for_field_json", [c_char_p, c_char_p, POINTER(c_void_p)], c_int),
+            ("normalize_git_remote", [c_char_p, POINTER(c_void_p)], c_int),
+            ("looks_like_editor_or_julia_internal", [c_char_p, POINTER(c_int)], c_int),
+            ("canonical_path", [c_char_p, POINTER(c_void_p)], c_int),
+            ("git_commit_info_json", [c_char_p, c_int, c_char_p, POINTER(c_void_p)], c_int),
+            ("caller_file_runtime", [c_char_p, POINTER(c_void_p)], c_int),
         ]
 
         for fn_name in ["version", "last_error"]:
@@ -196,8 +227,7 @@ class AHRI_TRE_C:
 
     def _call_allocating_utf8(self, fn_name: str, *args: Any) -> str:
         out_ptr = c_void_p()
-        fn = self._require_symbol(fn_name)
-        code = fn(*args, byref(out_ptr))
+        code = self._require_symbol(fn_name)(*args, byref(out_ptr))
         if code != 0:
             self._raise_last_error(code)
         try:
@@ -207,20 +237,40 @@ class AHRI_TRE_C:
             if out_ptr.value:
                 self._free_allocated(out_ptr)
 
-    def _call_generic_symbol(self, fn_name: str, *args: Any, **kwargs: Any) -> Any:
-        if kwargs:
-            raise TypeError(f"{fn_name} does not support keyword arguments in generic mode")
-        return self._require_symbol(fn_name)(*args)
+    def _call_bool_output(self, fn_name: str, *args: Any) -> bool:
+        out_value = c_int(0)
+        code = self._require_symbol(fn_name)(*args, byref(out_value))
+        if code != 0:
+            self._raise_last_error(code)
+        return bool(out_value.value)
+
+    def _call_int_output(self, fn_name: str, *args: Any) -> int:
+        out_value = c_int(0)
+        code = self._require_symbol(fn_name)(*args, byref(out_value))
+        if code != 0:
+            self._raise_last_error(code)
+        return int(out_value.value)
+
+    def _call_status_only(self, fn_name: str, *args: Any) -> None:
+        code = self._require_symbol(fn_name)(*args)
+        if code != 0:
+            self._raise_last_error(code)
+
+    def _bytes_pointer(self, data: bytes | bytearray | memoryview) -> tuple[Any, int]:
+        raw = bytes(data)
+        array = (c_ubyte * len(raw)).from_buffer_copy(raw)
+        return array, len(raw)
 
     def version(self) -> str:
-        return self._require_symbol("version")().decode("utf-8")
+        raw = self._require_symbol("version")()
+        return raw.decode("utf-8") if raw else ""
 
-    def _raise_last_error(self, code: int):
-        try:
-            raw = self._require_symbol("last_error")()
-            msg = raw.decode("utf-8") if raw else "Unknown AHRI_TRE C error"
-        except NotImplementedError:
-            msg = "Unknown AHRI_TRE C error"
+    def last_error(self) -> str:
+        raw = self._require_symbol("last_error")()
+        return raw.decode("utf-8") if raw else ""
+
+    def _raise_last_error(self, code: int) -> None:
+        msg = self.last_error() or "Unknown AHRI_TRE C error"
         raise RuntimeError(f"AHRI_TRE C error {code}: {msg}")
 
     def sha256_file_hex(self, file_path: str) -> str:
@@ -241,12 +291,17 @@ class AHRI_TRE_C:
     def file_uri_to_path(self, uri: str) -> str:
         return self._call_allocating_utf8("file_uri_to_path", uri.encode("utf-8"))
 
+    def emptydir(self, path: str, create: bool = False, retries: int = 0, wait_millis: int = 0) -> None:
+        self._call_status_only("emptydir", path.encode("utf-8"), int(create), retries, wait_millis)
+
     def is_ncname(self, value: str, strict: bool = False) -> bool:
-        out_valid = c_int(0)
-        code = self._require_symbol("is_ncname")(value.encode("utf-8"), int(strict), byref(out_valid))
-        if code != 0:
-            self._raise_last_error(code)
-        return bool(out_valid.value)
+        return self._call_bool_output("is_ncname", value.encode("utf-8"), int(strict))
+
+    def is_start_char(self, value: str) -> bool:
+        return self._call_bool_output("is_start_char", value.encode("utf-8"))
+
+    def is_name_char(self, value: str, strict: bool = False) -> bool:
+        return self._call_bool_output("is_name_char", value.encode("utf-8"), int(strict))
 
     def to_ncname(
         self,
@@ -265,43 +320,230 @@ class AHRI_TRE_C:
             int(strict),
         )
 
-    def strip_html(self, text: str) -> str:
-        return self._call_allocating_utf8("strip_html", text.encode("utf-8"))
+    def parse_flavour(self, flavour: str) -> DatabaseFlavour:
+        return DatabaseFlavour(self._call_int_output("parse_flavour", flavour.encode("utf-8")))
 
-    def infer_label_from_field_name(self, field_name: str) -> str:
-        return self._call_allocating_utf8("infer_label_from_field_name", field_name.encode("utf-8"))
+    def map_sql_type_to_tre(self, sql_type: str) -> int:
+        return self._call_int_output("map_sql_type_to_tre", sql_type.encode("utf-8"))
 
-    def get_redcap_choices_for_field_json(self, field_type: str, choices: str | None = None) -> str:
-        choices_arg = None if choices is None else choices.encode("utf-8")
-        return self._call_allocating_utf8(
-            "get_redcap_choices_for_field_json",
-            field_type.encode("utf-8"),
-            choices_arg,
+    def map_sql_type_to_tre_for_flavour(self, sql_type: str, flavour: int | DatabaseFlavour) -> int:
+        return self._call_int_output(
+            "map_sql_type_to_tre_for_flavour",
+            sql_type.encode("utf-8"),
+            int(flavour),
         )
 
+    def get_datasetname(
+        self,
+        study_name: str,
+        asset_name: str,
+        major: int,
+        minor: int,
+        patch: int,
+        include_schema: bool = False,
+    ) -> str:
+        return self._call_allocating_utf8(
+            "get_datasetname",
+            study_name.encode("utf-8"),
+            asset_name.encode("utf-8"),
+            major,
+            minor,
+            patch,
+            int(include_schema),
+        )
+
+    def get_datafilename(self, asset_name: str, major: int, minor: int, patch: int) -> str:
+        return self._call_allocating_utf8(
+            "get_datafilename", asset_name.encode("utf-8"), major, minor, patch
+        )
+
+    def get_datalake_file_path(
+        self,
+        lake_data: str,
+        study_name: str,
+        asset_name: str,
+        source_file_path: str,
+        major: int,
+        minor: int,
+        patch: int,
+    ) -> str:
+        return self._call_allocating_utf8(
+            "get_datalake_file_path",
+            lake_data.encode("utf-8"),
+            study_name.encode("utf-8"),
+            asset_name.encode("utf-8"),
+            source_file_path.encode("utf-8"),
+            major,
+            minor,
+            patch,
+        )
+
+    def prepare_datafile_digest(self, file_path: str, precomputed_digest: str | None = None) -> str:
+        digest_arg = None if precomputed_digest is None else precomputed_digest.encode("utf-8")
+        return self._call_allocating_utf8(
+            "prepare_datafile_digest", file_path.encode("utf-8"), digest_arg
+        )
+
+    def prepare_datafile_json(
+        self,
+        file_path: str,
+        edam_format: str,
+        compress: bool = False,
+        encrypt: bool = False,
+        precomputed_digest: str | None = None,
+    ) -> str:
+        digest_arg = None if precomputed_digest is None else precomputed_digest.encode("utf-8")
+        return self._call_allocating_utf8(
+            "prepare_datafile_json",
+            file_path.encode("utf-8"),
+            edam_format.encode("utf-8"),
+            int(compress),
+            int(encrypt),
+            digest_arg,
+        )
+
+    def dataset_to_arrow_output_path(
+        self, dataset_name: str, outputdir: str, replace: bool = False
+    ) -> tuple[str, bool]:
+        out_overwrite = c_int(0)
+        out_ptr = c_void_p()
+        code = self._require_symbol("dataset_to_arrow_output_path")(
+            dataset_name.encode("utf-8"),
+            outputdir.encode("utf-8"),
+            int(replace),
+            byref(out_overwrite),
+            byref(out_ptr),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            raw = ctypes.cast(out_ptr, c_char_p).value
+            return (raw.decode("utf-8") if raw else "", bool(out_overwrite.value))
+        finally:
+            if out_ptr.value:
+                self._free_allocated(out_ptr)
+
+    def dataset_to_csv_output_path(
+        self, dataset_name: str, outputdir: str, compress: bool = False, replace: bool = False
+    ) -> tuple[str, bool]:
+        out_overwrite = c_int(0)
+        out_ptr = c_void_p()
+        code = self._require_symbol("dataset_to_csv_output_path")(
+            dataset_name.encode("utf-8"),
+            outputdir.encode("utf-8"),
+            int(compress),
+            int(replace),
+            byref(out_overwrite),
+            byref(out_ptr),
+        )
+        if code != 0:
+            self._raise_last_error(code)
+        try:
+            raw = ctypes.cast(out_ptr, c_char_p).value
+            return (raw.decode("utf-8") if raw else "", bool(out_overwrite.value))
+        finally:
+            if out_ptr.value:
+                self._free_allocated(out_ptr)
+
+    def dataset_to_arrow_write_bytes(
+        self, dataset_name: str, outputdir: str, data: bytes | bytearray | memoryview, replace: bool = False
+    ) -> str:
+        payload, payload_len = self._bytes_pointer(data)
+        return self._call_allocating_utf8(
+            "dataset_to_arrow_write_bytes",
+            dataset_name.encode("utf-8"),
+            outputdir.encode("utf-8"),
+            payload,
+            payload_len,
+            int(replace),
+        )
+
+    def dataset_to_csv_write_text(
+        self, dataset_name: str, outputdir: str, csv_text: str, replace: bool = False
+    ) -> str:
+        return self._call_allocating_utf8(
+            "dataset_to_csv_write_text",
+            dataset_name.encode("utf-8"),
+            outputdir.encode("utf-8"),
+            csv_text.encode("utf-8"),
+            int(replace),
+        )
+
+    def dataset_to_csv_write_bytes(
+        self,
+        dataset_name: str,
+        outputdir: str,
+        data: bytes | bytearray | memoryview,
+        compress: bool = False,
+        replace: bool = False,
+    ) -> str:
+        payload, payload_len = self._bytes_pointer(data)
+        return self._call_allocating_utf8(
+            "dataset_to_csv_write_bytes",
+            dataset_name.encode("utf-8"),
+            outputdir.encode("utf-8"),
+            int(compress),
+            payload,
+            payload_len,
+            int(replace),
+        )
+
+    def normalise_orcid_rolename(self, orcid: str) -> str:
+        return self._call_allocating_utf8("normalise_orcid_rolename", orcid.encode("utf-8"))
+
+    def makeparams_json(self, n: int) -> str:
+        return self._call_allocating_utf8("makeparams_json", n)
+
+    def quote_ident(self, name: str) -> str:
+        return self._call_allocating_utf8("quote_ident", name.encode("utf-8"))
+
+    def quote_identifier(self, name: str, flavour: int | DatabaseFlavour) -> str:
+        return self._call_allocating_utf8("quote_identifier", name.encode("utf-8"), int(flavour))
+
+    def quote_sql_str(self, value: str) -> str:
+        return self._call_allocating_utf8("quote_sql_str", value.encode("utf-8"))
+
+    def quote_qualified_identifier(self, name: str) -> str:
+        return self._call_allocating_utf8("quote_qualified_identifier", name.encode("utf-8"))
+
+    def julia_type_to_sql_string(self, julia_type: str) -> str:
+        return self._call_allocating_utf8("julia_type_to_sql_string", julia_type.encode("utf-8"))
+
+    def tre_type_to_duckdb_sql(self, value_type_id: int) -> str:
+        return self._call_allocating_utf8("tre_type_to_duckdb_sql", value_type_id)
+
+    def extract_table_from_sql(self, sql: str) -> str:
+        return self._call_allocating_utf8("extract_table_from_sql", sql.encode("utf-8"))
+
     def parse_in_list_values(self, values_str: str) -> str:
+        return self._call_allocating_utf8("parse_in_list_values", values_str.encode("utf-8"))
+
+    def parse_in_list_values_json(self, values_str: str) -> str:
         return self._call_allocating_utf8("parse_in_list_values_json", values_str.encode("utf-8"))
 
     def parse_check_constraint_values(self, constraint_def: str, column_name: str) -> str:
+        return self._call_allocating_utf8(
+            "parse_check_constraint_values",
+            constraint_def.encode("utf-8"),
+            column_name.encode("utf-8"),
+        )
+
+    def parse_check_constraint_values_json(self, constraint_def: str, column_name: str) -> str:
         return self._call_allocating_utf8(
             "parse_check_constraint_values_json",
             constraint_def.encode("utf-8"),
             column_name.encode("utf-8"),
         )
 
-    def parse_redcap_choices(self, choices: str) -> str:
-        return self._call_allocating_utf8("parse_redcap_choices_json", choices.encode("utf-8"))
-
     def map_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
         out_type = c_int(0)
         out_fmt = c_void_p()
         validation_arg = None if validation is None else validation.encode("utf-8")
-        code = self._require_symbol("map_redcap_value_type")(
-            field_type.encode("utf-8"),
-            validation_arg,
-            byref(out_type),
-            byref(out_fmt),
-        )
+        try:
+            fn = self._require_symbol("map_value_type")
+        except NotImplementedError:
+            fn = self._require_symbol("map_redcap_value_type")
+        code = fn(field_type.encode("utf-8"), validation_arg, byref(out_type), byref(out_fmt))
         if code != 0:
             self._raise_last_error(code)
         try:
@@ -314,201 +556,151 @@ class AHRI_TRE_C:
             if out_fmt.value:
                 self._free_allocated(out_fmt)
 
-    def get_redcap_choices_for_field(self, field_type: str, choices: str | None = None) -> str:
-        return self.get_redcap_choices_for_field_json(field_type, choices)
-
-    def parse_in_list_values_json(self, values_str: str) -> str:
-        return self.parse_in_list_values(values_str)
-
-    def parse_check_constraint_values_json(self, constraint_def: str, column_name: str) -> str:
-        return self.parse_check_constraint_values(constraint_def, column_name)
+    def parse_redcap_choices(self, choices: str) -> str:
+        return self._call_allocating_utf8("parse_redcap_choices", choices.encode("utf-8"))
 
     def parse_redcap_choices_json(self, choices: str) -> str:
-        return self.parse_redcap_choices(choices)
+        return self._call_allocating_utf8("parse_redcap_choices_json", choices.encode("utf-8"))
+
+    def strip_html(self, text: str) -> str:
+        return self._call_allocating_utf8("strip_html", text.encode("utf-8"))
+
+    def infer_label_from_field_name(self, field_name: str) -> str:
+        return self._call_allocating_utf8("infer_label_from_field_name", field_name.encode("utf-8"))
+
+    def get_redcap_choices_for_field(self, field_type: str, choices: str | None = None) -> str:
+        choices_arg = None if choices is None else choices.encode("utf-8")
+        return self._call_allocating_utf8(
+            "get_redcap_choices_for_field",
+            field_type.encode("utf-8"),
+            choices_arg,
+        )
+
+    def get_redcap_choices_for_field_json(self, field_type: str, choices: str | None = None) -> str:
+        choices_arg = None if choices is None else choices.encode("utf-8")
+        return self._call_allocating_utf8(
+            "get_redcap_choices_for_field_json",
+            field_type.encode("utf-8"),
+            choices_arg,
+        )
+
+    def normalize_git_remote(self, url: str) -> str:
+        return self._call_allocating_utf8("normalize_git_remote", url.encode("utf-8"))
+
+    def looks_like_editor_or_julia_internal(self, path: str) -> bool:
+        return self._call_bool_output("looks_like_editor_or_julia_internal", path.encode("utf-8"))
+
+    def canonical_path(self, path: str) -> str:
+        return self._call_allocating_utf8("canonical_path", path.encode("utf-8"))
+
+    def git_commit_info_json(
+        self, dir_path: str, short_hash: bool = False, script_path: str | None = None
+    ) -> str:
+        script_arg = None if script_path is None else script_path.encode("utf-8")
+        return self._call_allocating_utf8(
+            "git_commit_info_json", dir_path.encode("utf-8"), int(short_hash), script_arg
+        )
+
+    def caller_file_runtime(self, hint_path: str | None = None) -> str:
+        hint_arg = None if hint_path is None else hint_path.encode("utf-8")
+        return self._call_allocating_utf8("caller_file_runtime", hint_arg)
+
+    def prepare_datafile(
+        self,
+        file_path: str,
+        edam_format: str,
+        compress: bool = False,
+        encrypt: bool = False,
+        precomputed_digest: str | None = None,
+    ) -> str:
+        return self.prepare_datafile_json(
+            file_path,
+            edam_format,
+            compress=compress,
+            encrypt=encrypt,
+            precomputed_digest=precomputed_digest,
+        )
+
+    def makeparams(self, n: int) -> str:
+        return self.makeparams_json(n)
 
     def map_redcap_value_type(self, field_type: str, validation: str | None = None) -> tuple[int, str | None]:
         return self.map_value_type(field_type, validation)
 
+    def git_commit_info(
+        self, dir_path: str, short_hash: bool = False, script_path: str | None = None
+    ) -> str:
+        return self.git_commit_info_json(dir_path, short_hash=short_hash, script_path=script_path)
 
-_REQUIRED_API_NAMES = [
-    "add_datastore_orcid",
-    "add_domain",
-    "add_entity",
-    "add_entity_relation",
-    "add_study",
-    "add_study_domain",
-    "add_transformation",
-    "add_transformation_input",
-    "add_transformation_output",
-    "add_variable",
-    "attach_datafile",
-    "attach_datafile_version",
-    "caller_file_runtime",
-    "closedatastore",
-    "connect_mssql",
-    "convert_missing_to_string",
-    "create_asset",
-    "create_dataset_meta",
-    "create_duckdb_table_sql",
-    "create_lake_database",
-    "create_store_database",
-    "create_transformation",
-    "createassets",
-    "createdatastore",
-    "createentities",
-    "createmapping",
-    "createstudies",
-    "createtransformations",
-    "createvariables",
-    "dataset_to_arrow",
-    "dataset_to_csv",
-    "dataset_to_dataframe",
-    "dataset_variables",
-    "emptydir",
-    "ensure_mssql_driver_registered",
-    "ensure_vocabulary",
-    "extract_table_from_sql",
+    def sha256_digest_hex(self, file_path: str) -> str:
+        return self.sha256_file_hex(file_path)
+
+    def verify_sha256_digest(self, file_path: str, expected_hex: str) -> bool:
+        return self.verify_sha256_file(file_path, expected_hex)
+
+
+_HEADER_API_NAMES = [
+    "version",
+    "last_error",
+    "sha256_file_hex",
+    "verify_sha256_file",
+    "path_to_file_uri",
     "file_uri_to_path",
-    "find_mssql_driver_in_directory",
-    "find_system_odbc_driver",
-    "get_asset",
-    "get_assetversions",
-    "get_check_constraint_values",
-    "get_code_table_vocabulary",
-    "get_column_comment",
-    "get_column_type_info",
-    "get_datafile",
-    "get_datafile_meta",
-    "get_datafile_metadata",
+    "emptydir",
+    "is_ncname",
+    "is_start_char",
+    "is_name_char",
+    "to_ncname",
+    "parse_flavour",
+    "map_sql_type_to_tre",
+    "map_sql_type_to_tre_for_flavour",
+    "get_datasetname",
     "get_datafilename",
     "get_datalake_file_path",
-    "get_dataset",
-    "get_dataset_variables",
-    "get_dataset_versions",
-    "get_datasetname",
-    "get_domain",
-    "get_domain_variables",
-    "get_domainentities",
-    "get_domainrelations",
-    "get_domains",
-    "get_eav_variable_names",
-    "get_entity",
-    "get_entityrelation",
-    "get_enum_values",
-    "get_foreign_key_reference",
-    "get_latest_version",
-    "get_namedkey",
-    "get_original_column_type",
-    "get_query_columns",
-    "get_studies",
-    "get_study",
-    "get_study_assets",
-    "get_study_datafiles",
-    "get_study_datasets",
-    "get_study_domains",
-    "get_study_variables",
-    "get_study_variables_df",
-    "get_studyid",
-    "get_table",
-    "get_table_columns",
-    "get_variable",
-    "get_variable_id",
-    "get_vocabularies",
-    "get_vocabulary",
-    "git_commit_info",
-    "ingest_file",
-    "ingest_file_version",
-    "ingest_redcap_project",
-    "initstudytypes",
-    "initvalue_types",
-    "insertdata",
-    "insertwithidentity",
-    "is_code_table",
-    "is_enum_type",
-    "is_ncname",
-    "julia_type_to_sql_string",
-    "lines",
-    "list_domainentities",
-    "list_domainrelations",
-    "list_study_assets_df",
-    "list_study_transformations",
-    "load_query",
-    "make_asset",
-    "makeparams",
-    "map_sql_type_to_tre",
-    "map_value_type",
-    "opendatastore",
-    "parse_check_constraint_values",
-    "parse_flavour",
-    "parse_in_list_values",
-    "parse_redcap_choices",
-    "path_to_file_uri",
-    "prepare_datafile",
-    "prepareinsertstatement",
-    "prepareselectstatement",
+    "prepare_datafile_digest",
+    "prepare_datafile_json",
+    "dataset_to_arrow_output_path",
+    "dataset_to_csv_output_path",
+    "dataset_to_arrow_write_bytes",
+    "dataset_to_csv_write_text",
+    "dataset_to_csv_write_bytes",
+    "normalise_orcid_rolename",
+    "makeparams_json",
     "quote_ident",
     "quote_identifier",
     "quote_sql_str",
-    "read_dataset",
-    "redcap_export_eav",
-    "redcap_fields",
-    "redcap_metadata",
-    "redcap_post",
-    "redcap_post_tofile",
-    "redcap_project_info",
-    "redcap_project_info_df",
-    "register_datafile",
-    "register_dataset",
-    "register_redcap_datadictionary",
-    "save_asset_version",
-    "save_dataset_variables",
-    "save_version",
-    "savedataframe",
-    "selectdataframe",
-    "set_version",
-    "sha256_digest_hex",
-    "sql_meta",
-    "sql_to_dataset",
-    "table_exists",
-    "table_has_primary_key",
-    "to_ncname",
-    "transaction_begin",
-    "transaction_commit",
-    "transaction_rollback",
-    "transform_eav_to_dataset",
-    "transform_eav_to_table",
+    "quote_qualified_identifier",
+    "julia_type_to_sql_string",
     "tre_type_to_duckdb_sql",
-    "update_domain",
-    "update_variable",
-    "updatevalues",
-    "upsert_entity",
-    "upsert_entityrelation",
-    "upsert_study",
-    "upsert_variable",
-    "verify_sha256_digest",
-    "vocabulary_items",
-    "wrap_query_for_metadata",
-    "_normalize_remote",
-    "_strip_html",
+    "extract_table_from_sql",
+    "parse_in_list_values",
+    "parse_in_list_values_json",
+    "parse_check_constraint_values",
+    "parse_check_constraint_values_json",
+    "map_value_type",
+    "parse_redcap_choices",
+    "parse_redcap_choices_json",
+    "strip_html",
+    "infer_label_from_field_name",
+    "get_redcap_choices_for_field",
+    "get_redcap_choices_for_field_json",
+    "normalize_git_remote",
+    "looks_like_editor_or_julia_internal",
+    "canonical_path",
+    "git_commit_info_json",
+    "caller_file_runtime",
 ]
 
+_COMPATIBILITY_ALIAS_NAMES = [
+    "prepare_datafile",
+    "makeparams",
+    "map_redcap_value_type",
+    "git_commit_info",
+    "sha256_digest_hex",
+    "verify_sha256_digest",
+]
 
-def _attach_generic_method(name: str) -> None:
-    if hasattr(AHRI_TRE_C, name):
-        return
-
-    def _method(self: AHRI_TRE_C, *args: Any, **kwargs: Any) -> Any:
-        return self._call_generic_symbol(name, *args, **kwargs)
-
-    _method.__name__ = name
-    _method.__qualname__ = f"AHRI_TRE_C.{name}"
-    setattr(AHRI_TRE_C, name, _method)
-
-
-for _name in sorted(set(_REQUIRED_API_NAMES)):
-    if _name.isidentifier():
-        _attach_generic_method(_name)
-
+_MODULE_PROXY_NAMES = [*_HEADER_API_NAMES, *_COMPATIBILITY_ALIAS_NAMES]
 
 _default_client: AHRI_TRE_C | None = None
 
@@ -532,12 +724,11 @@ def _attach_module_proxy(name: str) -> None:
     globals()[name] = _proxy
 
 
-for _name in sorted(set(_REQUIRED_API_NAMES)):
-    if _name.isidentifier():
-        _attach_module_proxy(_name)
+for _name in _MODULE_PROXY_NAMES:
+    _attach_module_proxy(_name)
 
 
-_base_exports = [
+__all__ = [
     "AHRI_TRE_C",
     "ColumnInfo",
     "DatabaseFlavour",
@@ -545,4 +736,3 @@ _base_exports = [
     "_normalize_remote",
     "_strip_html",
 ]
-__all__ = _base_exports
