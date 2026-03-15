@@ -1,6 +1,9 @@
 import unittest
 from pathlib import Path
+import sys
 from unittest.mock import Mock, patch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 import ahri_tre_c
 from ahri_tre_c.core import AHRI_TRE_C, _library_candidates_for_root, default_library_path
@@ -14,7 +17,7 @@ class CoreWrapperTests(unittest.TestCase):
             setattr(lib, name, fn)
             setattr(lib, f"ahri_tre_{name}", fn)
 
-        bind("version", Mock(return_value=b"0.1.0"))
+        bind("version", Mock(return_value=b"0.2.0"))
         bind("last_error", Mock(return_value=b"boom"))
 
         # Most wrapper methods use an allocated UTF-8 pointer output and return int status.
@@ -55,7 +58,7 @@ class CoreWrapperTests(unittest.TestCase):
     def test_version_works_with_mocked_library(self, cdll_mock: Mock):
         cdll_mock.return_value = self._make_mock_lib()
         client = AHRI_TRE_C("dummy.dll")
-        self.assertEqual(client.version(), "0.1.0")
+        self.assertEqual(client.version(), "0.2.0")
 
     @patch("ahri_tre_c.core.ctypes.CDLL")
     def test_falls_back_to_prefixed_symbols_for_legacy_libraries(self, cdll_mock: Mock):
@@ -86,7 +89,7 @@ class CoreWrapperTests(unittest.TestCase):
 
         cdll_mock.return_value = legacy
         client = AHRI_TRE_C("dummy.dll")
-        self.assertEqual(client.version(), "0.1.0")
+        self.assertEqual(client.version(), "0.2.0")
 
     @patch("ahri_tre_c.core.ctypes.CDLL")
     def test_verify_sha256_file_returns_bool(self, cdll_mock: Mock):

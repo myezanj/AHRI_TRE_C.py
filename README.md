@@ -45,11 +45,38 @@ On Windows PowerShell:
 $env:AHRI_TRE_C_ROOT = "C:\\path\\to\\AHRI_TRE.c"
 ```
 
+Preferred shared env alias (also supported):
+
+```powershell
+$env:TRE_C_ROOT = "C:\\path\\to\\AHRI_TRE.c"
+```
+
 If you already know the compiled shared library path, you can set:
 
 ```powershell
 $env:AHRI_TRE_C_LIB = "C:\\path\\to\\ahri_tre_c.dll"
 ```
+
+Preferred shared env alias (also supported):
+
+```powershell
+$env:TRE_C_LIB = "C:\\path\\to\\ahri_tre_c.dll"
+```
+
+## Shared C version window policy
+
+This wrapper enforces a shared C-core compatibility window at load time so
+wrapper releases can remain independent while targeting the same ABI lane.
+
+Defaults:
+
+- `TRE_C_VERSION_MIN=0.2.0`
+- `TRE_C_VERSION_MAX=0.2.x`
+
+Supported legacy aliases:
+
+- `AHRI_TRE_C_VERSION_MIN`
+- `AHRI_TRE_C_VERSION_MAX`
 
 ## Usage
 

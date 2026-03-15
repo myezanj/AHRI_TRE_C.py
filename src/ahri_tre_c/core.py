@@ -9,6 +9,18 @@ from pathlib import Path
 from typing import Any
 
 
+_NEW_LIB_ENV = "TRE_C_LIB"
+_OLD_LIB_ENV = "AHRI_TRE_C_LIB"
+_NEW_ROOT_ENV = "TRE_C_ROOT"
+_OLD_ROOT_ENV = "AHRI_TRE_C_ROOT"
+_NEW_VERSION_MIN_ENV = "TRE_C_VERSION_MIN"
+_OLD_VERSION_MIN_ENV = "AHRI_TRE_C_VERSION_MIN"
+_NEW_VERSION_MAX_ENV = "TRE_C_VERSION_MAX"
+_OLD_VERSION_MAX_ENV = "AHRI_TRE_C_VERSION_MAX"
+_DEFAULT_VERSION_MIN = "0.2.0"
+_DEFAULT_VERSION_MAX = "0.2.x"
+
+
 @dataclass(frozen=True)
 class ColumnInfo:
     name: str
@@ -37,11 +49,60 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text or "")
 
 
+def _first_env(*names: str) -> str | None:
+    for name in names:
+        value = os.getenv(name)
+        if value is not None and value.strip():
+            return value.strip()
+    return None
+
+
+def _parse_version(version: str) -> tuple[int, int, int]:
+    match = re.match(r"^\s*(\d+)\.(\d+)\.(\d+)", version or "")
+    if not match:
+        raise RuntimeError(
+            f"Invalid C core version '{version}'. Expected semver like '0.2.0'."
+        )
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _version_meets_min(current: tuple[int, int, int], min_spec: str) -> bool:
+    return current >= _parse_version(min_spec)
+
+
+def _version_meets_max(current: tuple[int, int, int], max_spec: str) -> bool:
+    spec = (max_spec or "").strip().lower()
+    if "x" in spec or "*" in spec:
+        parts = re.split(r"[.]", spec)
+        current_parts = [current[0], current[1], current[2]]
+        for index, token in enumerate(parts[:3]):
+            token = token.strip()
+            if token in ("x", "*"):
+                return True
+            if not token.isdigit() or current_parts[index] != int(token):
+                return False
+        return True
+    return current <= _parse_version(spec)
+
+
+def _validate_core_version_window(core_version: str) -> None:
+    min_spec = _first_env(_NEW_VERSION_MIN_ENV, _OLD_VERSION_MIN_ENV) or _DEFAULT_VERSION_MIN
+    max_spec = _first_env(_NEW_VERSION_MAX_ENV, _OLD_VERSION_MAX_ENV) or _DEFAULT_VERSION_MAX
+    current = _parse_version(core_version)
+
+    if not _version_meets_min(current, min_spec) or not _version_meets_max(current, max_spec):
+        raise RuntimeError(
+            "AHRI_TRE C core version "
+            f"'{core_version}' is outside the supported window [{min_spec}, {max_spec}]. "
+            f"Adjust {_NEW_VERSION_MIN_ENV}/{_NEW_VERSION_MAX_ENV} or install a compatible core."
+        )
+
+
 def _candidate_core_roots() -> list[Path]:
     roots: list[Path] = []
     seen: set[str] = set()
 
-    env_root = os.getenv("AHRI_TRE_C_ROOT")
+    env_root = _first_env(_NEW_ROOT_ENV, _OLD_ROOT_ENV)
     if env_root:
         env_path = Path(env_root).expanduser().resolve()
         roots.append(env_path)
@@ -88,7 +149,7 @@ def _library_candidates_for_root(core_root: Path, system: str) -> list[Path]:
 
 
 def default_library_path() -> str:
-    env = os.getenv("AHRI_TRE_C_LIB")
+    env = _first_env(_NEW_LIB_ENV, _OLD_LIB_ENV)
     if env:
         return env
 
@@ -98,7 +159,7 @@ def default_library_path() -> str:
             if candidate.exists():
                 return str(candidate)
 
-    raise FileNotFoundError("Could not find AHRI TRE C shared library. Set AHRI_TRE_C_LIB.")
+    raise FileNotFoundError("Could not find AHRI TRE C shared library. Set TRE_C_LIB or AHRI_TRE_C_LIB.")
 
 
 class AHRI_TRE_C:
@@ -106,6 +167,7 @@ class AHRI_TRE_C:
         self.lib = ctypes.CDLL(str(Path(library_path or default_library_path()).resolve()))
         self._bound_functions: dict[str, Any] = {}
         self._configure_signatures()
+        _validate_core_version_window(self.version())
 
     def _bind_symbol(self, name: str) -> Any:
         fn = self._bound_functions.get(name)
